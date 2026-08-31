@@ -30,13 +30,21 @@ func main() {
 	}
 	fmt.Println("Welcome to Peril,", username)
 
-	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, fmt.Sprintf("%s.%s", routing.PauseKey, username), routing.PauseKey, pubsub.SimpleQueueTypeTransient)
-	if err != nil {
-		log.Fatalf("Failed to declare and bind queue: %v", err)
-	}
-	defer ch.Close()
-
 	gameState := gamelogic.NewGameState(username)
+
+	publishCh, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("could not create channel: %v", err)
+	}
+
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, fmt.Sprintf("%s.%s", routing.PauseKey, username), routing.PauseKey, pubsub.SimpleQueueTypeTransient, handlerPause(gameState))
+	if err != nil {
+		log.Fatalf("Failed to subscribe to pause queue: %v", err)
+	}
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username), fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), pubsub.SimpleQueueTypeTransient, handlerMove(gameState))
+	if err != nil {
+		log.Fatalf("Failed to subscribe to army moves queue: %v", err)
+	}
 
 	for {
 		input := gamelogic.GetInput()
@@ -57,7 +65,12 @@ func main() {
 				fmt.Println("Error:", err)
 				continue
 			}
-			fmt.Println("Successfully moved units:", moveResult.Units, "to", moveResult.ToLocation)
+			pubsub.PublishJSON(publishCh, routing.ExchangePerilTopic, fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), moveResult)
+			if err != nil {
+				fmt.Println("Failed to publish move result:", err)
+				continue
+			}
+			fmt.Println("Successfully moved units & published move result:", moveResult.Units, "to", moveResult.ToLocation)
 			continue
 		}
 		if input[0] == "status" {

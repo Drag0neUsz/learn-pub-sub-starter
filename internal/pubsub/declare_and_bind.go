@@ -23,7 +23,6 @@ func DeclareAndBind(
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
-	defer ch.Close()
 	dur := false
 	if queueType == SimpleQueueTypeDurable {
 		dur = true

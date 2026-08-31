@@ -40,12 +40,20 @@ func main() {
 		}
 		if input[0] == "pause" {
 			fmt.Println("Sending pause message...")
-			pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
+			err := pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
+			if err != nil {
+				fmt.Println("Failed to publish pause message:", err)
+				continue
+			}
 			continue
 		}
 		if input[0] == "resume" {
 			fmt.Println("Sending resume message...")
-			pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: false})
+			err := pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: false})
+			if err != nil {
+				fmt.Println("Failed to publish resume message:", err)
+				continue
+			}
 			continue
 		}
 		if input[0] == "exit" {
