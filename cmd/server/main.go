@@ -56,8 +56,8 @@ func main() {
 			}
 			continue
 		}
-		if input[0] == "exit" {
-			fmt.Println("Exiting...")
+		if input[0] == "quit" {
+			fmt.Println("Quitting...")
 			break
 		}
 		fmt.Println("Invalid input")

@@ -26,32 +26,49 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	return err
 }
 
+type AckType string
+
+const (
+	AckTypeAck         AckType = "Ack"
+	AckTypeNackRequeue AckType = "NackRequeue"
+	AckTypeNackDiscard AckType = "NackDiscard"
+)
+
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange,
 	queueName,
 	key string,
 	queueType SimpleQueueType,
-	handler func(T),
+	handler func(T) AckType,
 ) error {
-	ch, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
 	}
 
-	msgs, err := ch.Consume(queueName, "", false, false, false, false, nil)
+	msgs, err := ch.Consume(q.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
 	go func() {
+		defer ch.Close()
 		for msg := range msgs {
 			var val T
 			err := json.Unmarshal(msg.Body, &val)
 			if err != nil {
 				continue
 			}
-			handler(val)
-			msg.Ack(false)
+			ackType := handler(val)
+			switch ackType {
+			case AckTypeAck:
+				msg.Ack(false)
+			case AckTypeNackRequeue:
+				msg.Nack(false, true)
+			case AckTypeNackDiscard:
+				msg.Nack(false, false)
+
+			}
 		}
 	}()
 

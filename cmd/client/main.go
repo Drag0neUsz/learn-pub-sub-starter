@@ -41,9 +41,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to subscribe to pause queue: %v", err)
 	}
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username), fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), pubsub.SimpleQueueTypeTransient, handlerMove(gameState))
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username), fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), pubsub.SimpleQueueTypeTransient, handlerMove(gameState, publishCh))
 	if err != nil {
 		log.Fatalf("Failed to subscribe to army moves queue: %v", err)
+	}
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix, fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix), pubsub.SimpleQueueTypeDurable, handlerConsumeWar(gameState))
+	if err != nil {
+		log.Fatalf("Failed to subscribe to war recognitions queue: %v", err)
 	}
 
 	for {

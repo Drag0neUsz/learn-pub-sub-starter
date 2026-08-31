@@ -1,6 +1,8 @@
 package pubsub
 
 import (
+	"fmt"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -33,9 +35,12 @@ func DeclareAndBind(
 		!dur,
 		!dur,
 		false,
-		nil,
+		amqp.Table{
+			"x-dead-letter-exchange": "peril_dlx",
+		},
 	)
 	if err != nil {
+		fmt.Printf("3: %v\n", err)
 		return nil, amqp.Queue{}, err
 	}
 
