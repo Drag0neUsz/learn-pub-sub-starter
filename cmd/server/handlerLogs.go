@@ -10,7 +10,6 @@ import (
 
 func handlerLogs(log routing.GameLog) pubsub.AckType {
 	defer fmt.Println("> ", log)
-	fmt.Println("Received game log:", log)
 	gamelogic.WriteLog(log)
 	return pubsub.AckTypeAck
 }

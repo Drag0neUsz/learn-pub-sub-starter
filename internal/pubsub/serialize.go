@@ -36,47 +36,6 @@ const (
 	AckTypeNackDiscard AckType = "NackDiscard"
 )
 
-func SubscribeJSON[T any](
-	conn *amqp.Connection,
-	exchange,
-	queueName,
-	key string,
-	queueType SimpleQueueType,
-	handler func(T) AckType,
-) error {
-	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
-	if err != nil {
-		return err
-	}
-
-	msgs, err := ch.Consume(q.Name, "", false, false, false, false, nil)
-	if err != nil {
-		return err
-	}
-	go func() {
-		defer ch.Close()
-		for msg := range msgs {
-			var val T
-			err := json.Unmarshal(msg.Body, &val)
-			if err != nil {
-				continue
-			}
-			ackType := handler(val)
-			switch ackType {
-			case AckTypeAck:
-				msg.Ack(false)
-			case AckTypeNackRequeue:
-				msg.Nack(false, true)
-			case AckTypeNackDiscard:
-				msg.Nack(false, false)
-
-			}
-		}
-	}()
-
-	return nil
-}
-
 func PublishGOB[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	buf := bytes.NewBuffer(nil)
 	enc := gob.NewEncoder(buf)
@@ -98,19 +57,21 @@ func PublishGOB[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	return err
 }
 
-func SubscribeGOB[T any](
+func Subscribe[T any](
 	conn *amqp.Connection,
 	exchange,
 	queueName,
 	key string,
-	simpleQueueType SimpleQueueType,
+	queueType SimpleQueueType,
 	handler func(T) AckType,
+	unmarshaller func([]byte) (T, error),
 ) error {
-	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
 	}
 
+	ch.Qos(10, 0, false)
 	msgs, err := ch.Consume(q.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -118,8 +79,7 @@ func SubscribeGOB[T any](
 	go func() {
 		defer ch.Close()
 		for msg := range msgs {
-			var val T
-			err := gob.NewDecoder(bytes.NewReader(msg.Body)).Decode(&val)
+			val, err := unmarshaller(msg.Body)
 			if err != nil {
 				continue
 			}
@@ -136,4 +96,16 @@ func SubscribeGOB[T any](
 	}()
 
 	return nil
+}
+
+func UnmarshalJSON[T any](data []byte) (T, error) {
+	var val T
+	err := json.Unmarshal(data, &val)
+	return val, err
+}
+
+func UnmarshalGOB[T any](data []byte) (T, error) {
+	var val T
+	err := gob.NewDecoder(bytes.NewReader(data)).Decode(&val)
+	return val, err
 }

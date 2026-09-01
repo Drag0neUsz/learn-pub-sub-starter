@@ -37,15 +37,15 @@ func main() {
 		log.Fatalf("could not create channel: %v", err)
 	}
 
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, fmt.Sprintf("%s.%s", routing.PauseKey, username), routing.PauseKey, pubsub.SimpleQueueTypeTransient, handlerPause(gameState))
+	err = pubsub.Subscribe(conn, routing.ExchangePerilDirect, fmt.Sprintf("%s.%s", routing.PauseKey, username), fmt.Sprintf("%s.*", routing.PauseKey), pubsub.SimpleQueueTypeTransient, handlerPause(gameState), pubsub.UnmarshalJSON[routing.PlayingState])
 	if err != nil {
 		log.Fatalf("Failed to subscribe to pause queue: %v", err)
 	}
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username), fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), pubsub.SimpleQueueTypeTransient, handlerMove(gameState, publishCh))
+	err = pubsub.Subscribe(conn, routing.ExchangePerilTopic, fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username), fmt.Sprintf("%s.*", routing.ArmyMovesPrefix), pubsub.SimpleQueueTypeTransient, handlerMove(gameState, publishCh), pubsub.UnmarshalJSON[gamelogic.ArmyMove])
 	if err != nil {
 		log.Fatalf("Failed to subscribe to army moves queue: %v", err)
 	}
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix, fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix), pubsub.SimpleQueueTypeDurable, handlerConsumeWar(gameState, publishCh))
+	err = pubsub.Subscribe(conn, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix, fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix), pubsub.SimpleQueueTypeDurable, handlerConsumeWar(gameState, publishCh), pubsub.UnmarshalJSON[gamelogic.RecognitionOfWar])
 	if err != nil {
 		log.Fatalf("Failed to subscribe to war recognitions queue: %v", err)
 	}
@@ -86,7 +86,12 @@ func main() {
 			continue
 		}
 		if input[0] == "spam" {
-			fmt.Println("Spamming not allowed yet!")
+			err := handlerSpam(publishCh, input, username)
+			if err != nil {
+				fmt.Println("Error:", err)
+			} else {
+				fmt.Println("Successfully spammed", input[1], "game logs")
+			}
 			continue
 		}
 		if input[0] == "quit" {
