@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -68,6 +70,67 @@ func SubscribeJSON[T any](
 			case AckTypeNackDiscard:
 				msg.Nack(false, false)
 
+			}
+		}
+	}()
+
+	return nil
+}
+
+func PublishGOB[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	buf := bytes.NewBuffer(nil)
+	enc := gob.NewEncoder(buf)
+	err := enc.Encode(val)
+	if err != nil {
+		return err
+	}
+	err = ch.PublishWithContext(
+		context.Background(),
+		exchange,
+		key,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        buf.Bytes(),
+		},
+	)
+	return err
+}
+
+func SubscribeGOB[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	ch, q, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	if err != nil {
+		return err
+	}
+
+	msgs, err := ch.Consume(q.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	go func() {
+		defer ch.Close()
+		for msg := range msgs {
+			var val T
+			err := gob.NewDecoder(bytes.NewReader(msg.Body)).Decode(&val)
+			if err != nil {
+				continue
+			}
+			ackType := handler(val)
+			switch ackType {
+			case AckTypeAck:
+				msg.Ack(false)
+			case AckTypeNackRequeue:
+				msg.Nack(false, true)
+			case AckTypeNackDiscard:
+				msg.Nack(false, false)
 			}
 		}
 	}()
